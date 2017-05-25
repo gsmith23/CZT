@@ -1,0 +1,147 @@
+#=====================================================
+# Created by: A. Cherlin
+# 14th Dec. 2016
+#
+# Modified by: G. Smith (gsmith23@ph.ed.ac.uk)
+# 24th May 2017
+#=====================================================
+
+#=====================================================
+# VISUALISATION
+#=====================================================
+
+/vis/disable
+
+/vis/open	     OGLIQt
+/vis/viewer/set/viewpointThetaPhi 45 45
+/vis/viewer/zoom       1.0
+/vis/drawVolume
+/tracking/storeTrajectory      1
+/vis/scene/add/trajectories 
+/vis/scene/endOfEventAction    accumulate
+
+/control/execute    Verbose.mac
+
+#=====================================================
+# GEOMETRY
+#=====================================================
+
+/gate/geometry/setMaterialDatabase ./GateMaterials.db
+
+# WORLD
+/gate/world/geometry/setXLength       25. cm
+/gate/world/geometry/setYLength       25. cm
+/gate/world/geometry/setZLength       50. cm
+
+# CT SYSTEM
+/gate/world/daughters/name CTscanner
+/gate/world/daughters/insert box
+/gate/CTscanner/placement/setTranslation 0. 0. 100. mm
+/gate/CTscanner/geometry/setXLength 100. mm
+/gate/CTscanner/geometry/setYLength 100. mm
+/gate/CTscanner/geometry/setZLength 100. mm
+/gate/CTscanner/setMaterial Vacuum
+#/gate/CTscanner/setMaterial Air
+/gate/CTscanner/vis/forceWireframe
+/gate/CTscanner/vis/setColor white
+
+# CZT CRYSTAL
+/gate/CTscanner/daughters/name module
+/gate/CTscanner/daughters/insert box
+/gate/module/placement/setTranslation 0. 0. 0 mm
+/gate/module/geometry/setXLength 100 mm
+/gate/module/geometry/setYLength 100 mm
+/gate/module/geometry/setZLength 100 mm
+/gate/module/setMaterial CZT
+/gate/module/vis/setColor red
+
+# ATTACH SYSTEM
+/gate/systems/CTscanner/module/attach module
+
+# ATTACH SENSITIVE DETECTOR
+/gate/module/attachCrystalSD
+
+
+#=====================================================
+# PHYSICS
+#=====================================================
+
+/gate/physics/addPhysicsList emstandard_opt3
+#/gate/physics/addPhysicsList emlivermore_polar
+/process/em/fluo true
+/process/em/auger true
+/process/em/deexcitation module true true false
+
+/gate/physics/processList Enabled
+/gate/physics/processList Initialized
+
+/gate/physics/Gamma/SetCutInRegion module 1 um
+
+#=====================================================
+# INITIALISATION
+#=====================================================
+
+/gate/run/initialize
+
+#=====================================================
+# DIGITIZATION
+#=====================================================
+
+# only using Hits tree
+
+#=====================================================
+# SOURCE
+#=====================================================
+
+# Single 511 keV gamma source
+# 22x22 mm^2 beam in z direction
+# polarized in x direction
+
+# NB polarised scattering only takes effect
+# with emlivermore_polar physics list
+
+/gate/source/addSource gamma1 gps
+/gate/source/gamma1/gps/particle gamma
+/gate/source/gamma1/gps/monoenergy 511 keV 
+/gate/source/gamma1/setActivity  1 becquerel
+/gate/source/gamma1/gps/centre 0.0 0.0 0.0 mm
+/gate/source/gamma1/gps/direction 0 0 1
+/gate/source/gamma1/gps/type Plane
+/gate/source/gamma1/gps/shape Square
+/gate/source/gamma1/gps/halfx 11 mm
+/gate/source/gamma1/gps/halfy 11 mm
+/gate/source/gamma1/gps/polarization 1 0 0
+
+/gate/source/list
+
+#=====================================================
+#  D A T A   O U T P U T   
+#=====================================================
+
+/gate/output/root/enable
+
+#/gate/output/root/setFileName  CZT_Single_StdOpt3_output
+/gate/output/root/setFileName  CZT_Single_LivePol_output
+/gate/output/root/setRootHitFlag          1
+/gate/output/root/setRootSinglesFlag      0
+/gate/output/root/setRootOpticalFlag      0
+
+#====================================================
+#  R A N D O M   E N G I N E  A N D  S E E D
+#====================================================
+# JamesRandom Ranlux64 MersenneTwister
+/gate/random/setEngineName JamesRandom
+
+#/gate/random/setEngineSeed default
+/gate/random/setEngineSeed auto
+
+/gate/random/verbose 1
+
+#=====================================================
+#   M E A S U R E M E N T   S E T T I N G S   
+#=====================================================
+
+/gate/application/setTimeStart	0	s
+/gate/application/setTimeStop	120	s
+
+/gate/application/startDAQ
