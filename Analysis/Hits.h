@@ -33,12 +33,13 @@ class Hits {
   Long64_t maxEntry = 0;
   
   Int_t    eventID_prevEntry = -1;
-  Int_t    eventEntry = 0;
+  Int_t    eventEntry   = -1;
   
+  Int_t    photon0Entry = 0;
   Int_t    photon1Entry = 0;
-  Int_t    photon2Entry = 0;
 
-  Float_t  meanEntriesPerEvent = 0.;
+  Int_t    entriesInEvent;
+  Double_t meanEntriesPerEvent = 0.;
   
   Int_t    nPhot = 0;
   Int_t    nRay  = 0;
@@ -59,22 +60,24 @@ class Hits {
   Float_t  eTotMod1 = 0.;
   Float_t  eTotMod2 = 0.;
   
-  Bool_t   goodPhi;
+  Float_t  phi[2],theta[2];
   
-  Float_t  phi,theta;
-  
-  // vectors for calculating phi
-  
-  TVector3 vBeam_g1, vBeam_g2;
-  TVector3 p0_g1,p0_g2;
-  TVector3 p1_g1,p1_g2;
-  TVector3 p2_g1,p2_g2;
-  TVector3 vScat_g1,vScat_g2;
+  // vectors for calculating theta, phi
+  TVector3 vBeam[2];
+  TVector3 p0[2];
+  TVector3 p1[2];
+  TVector3 p2[2];
+  TVector3 vScat[2];
 
-  TH1F * hPhi  = new TH1F("hPhi","hPhi;#phi (deg);Events",
-			   36,-180,180);
-  TH1F * hTheta = new TH1F("hTheta","hTheta;#theta (deg);Events",
-			   36,0,180);
+  TH1F * hPhi[2];
+  TH1F * hTheta[2];
+  
+  TString hName;
+  TString hTitle;
+  
+  Int_t   nBins  = 36;
+  //Float_t xRange[2] = {-180., 180.};
+  
   
   // leaf types
   Int_t           PDGEncoding;
@@ -162,16 +165,20 @@ class Hits {
   virtual Bool_t   Notify();
   virtual void     Show(Long64_t entry = -1);
   
+  void InitHistos();
   void InitNewEvent();
-  void EndEvent();
+  void EndEvent(Bool_t);
   void EndPreviousEvent();
   void PrintEntry(Long64_t entryNumber);
-  void PrintEventStats();
+  void PrintEventStats(Bool_t);
   void PrintTVector3Elements(TString,
 			     TVector3);
   void FinalStats();
   void SumEnergyDep();
   void CountProcesses(TString);
+  
+  void SetVerbose(Int_t);
+
 };
 
 #endif
@@ -189,6 +196,8 @@ Hits::Hits(TTree *tree) : fChain(0)
   //fileName      = "CZT_Single_StdOpt3_output.root";
   
   fileName      = "CZT_Double_LivePol_output.root";
+  
+  //fileName = "test_double.root";
 
   dataDirectory = "../Data/";
   
@@ -296,16 +305,22 @@ Bool_t Hits::Notify()
    return kTRUE;
 }
 
-void Hits::PrintEventStats(){
-  
+void Hits::PrintEventStats(Bool_t prevEvent){
+
+  Float_t eventID2Print = eventID;
+
+  if(prevEvent)
+    eventID2Print = eventID-1;
+      
+
   if(verbose > 0 ){
-    cout << " Event " << (nEvents-1) << " Stats "     << endl;
-    cout << " eTotMod1        = " << eTotMod1     << endl;
-    cout << " n event entries = " << eventEntry   << endl;
+    cout << " Event " << eventID2Print << " Stats "    << endl;
+    cout << " eTotMod1        = " << eTotMod1        << endl;
+    cout << " n event entries = " << entriesInEvent  << endl;
     
     if(sndHitGood){
-      cout << " phi           = " << phi         << endl;
-      cout << " theta         = " << theta       << endl;
+      cout << " phi[moduleID]           = " << phi[moduleID]         << endl;
+      cout << " theta[moduleID]         = " << theta[moduleID]       << endl;
     }
     
     cout << " --------------------------------------- " <<  endl;
@@ -326,23 +341,27 @@ void Hits::PrintTVector3Elements(TString vName,
 }
 
 void Hits::EndPreviousEvent(){
-  EndEvent();
+  EndEvent( kTRUE );
 }
 
-void Hits::EndEvent(){
+void Hits::EndEvent(Bool_t prevEvnt = kFALSE){
 
   // print event statistics 
   if(eventID_prevEntry == -1)
     return;
   
-  PrintEventStats();
+  PrintEventStats(prevEvnt);
+
+  entriesInEvent = eventEntry+1;
+  
+  eventEntry = -1;
   
   // iterate / accumulate event variables
-  meanEntriesPerEvent += eventEntry;
-
-  if(eventEntry == nPhot)
+  meanEntriesPerEvent += entriesInEvent;
+  
+  if(entriesInEvent == nPhot)
     fracPhotOnly = fracPhotOnly + 1.;
-  else if(eventEntry == nRay)
+  else if(entriesInEvent == nRay)
     fracRayOnly += (Float_t) nRay;
   
   if(nPhot>0 && nComp == 0)
@@ -350,12 +369,28 @@ void Hits::EndEvent(){
   
   if(nComp > 0)
     fracComp = fracComp + 1.0;
-
+  
   if(sndHitGood){
-    hPhi->Fill(phi);
-    hTheta->Fill(theta);
+    hPhi[moduleID]->Fill(phi[moduleID]);
+    hTheta[moduleID]->Fill(theta[moduleID]);
   }
 
+}
+
+void Hits::InitHistos(){
+  
+  for( Int_t i = 0 ; i < 2 ; i++){
+    
+    hName.Form("hPhi_%d",i);
+    hTitle.Form("hPhi_%d;#phi (deg);Events",i);
+    hPhi[i] = new TH1F(hName,hTitle,
+		       nBins,-180,180);
+    
+    hName.Form("hTheta_%d",i);
+    hTitle.Form("hTheta_%d;#theta (deg);Events",i);
+    hTheta[i] = new TH1F(hName,hTitle,
+			 nBins,0,180);
+  }
 }
 
 void Hits::InitNewEvent(){
@@ -365,7 +400,7 @@ void Hits::InitNewEvent(){
   nEvents++;
   
   //reset event by event variables
-  eventEntry = 0;
+  entriesInEvent = 0;
 
   eTotMod1 = 0.0;
   eTotMod2 = 0.0;
@@ -388,9 +423,9 @@ void Hits::FinalStats(){
 
   // Last iteration of loop
   EndEvent();
-
+  
   // Calculate final variables
-  meanEntriesPerEvent = (Float_t)meanEntriesPerEvent/nEvents;
+  meanEntriesPerEvent = (Double_t)meanEntriesPerEvent/nEvents;
   
   fracPhotOnly = fracPhotOnly/(Float_t)nEvents;
   fracRayOnly  = fracRayOnly/(Float_t)nEvents;
@@ -415,38 +450,48 @@ void Hits::FinalStats(){
   cout << " --------------------------------------- " <<  endl;
 
   meanEntriesPerEvent = 0.;
+  eventID_prevEntry = -1;
+    
   fracPhotOnly = 0;
   fracRayOnly  = 0;
   fracPhot     = 0;
   fracComp     = 0;
   nEvents      = 0;
-  eventID_prevEntry = -1;
   
-  hPhi->SetMinimum(0);
+  for (Int_t i = 0 ; i < 2 ; i++)
+    hPhi[i]->SetMinimum(0);
   
-  TCanvas * canvas =  new TCanvas("canvas","canvas",800,400);
-  canvas->Divide(2,1);
+  TCanvas * canvas =  new TCanvas("canvas","canvas",800,800);
+  canvas->Divide(2,2);
 
   canvas->cd(1);
-  hPhi->Draw();
+  hPhi[0]->Draw();
   canvas->cd(2);
-  hTheta->Draw();
+  hTheta[0]->Draw();
+  canvas->cd(3);
+  hPhi[1]->Draw();
+  canvas->cd(4);
+  hTheta[1]->Draw();
+
 }
 
 void Hits::PrintEntry(Long64_t entryNum){
-
   
-  cout << " -------------------------- "   << endl;
-  cout << " eventID     = " << eventID     << endl;
-  cout << " entry       = " << entryNum    << endl;
-  cout << " eventEntry  = " << eventEntry  << endl;
-  cout << " process     = " << processName << endl;
-  cout << " trackID     = " << trackID     << endl;
-  cout << " moduleID    = " << moduleID    << endl;
-  cout << " photonID    = " << photonID    << endl;
-  cout << " parentID    = " << parentID    << endl;
-  cout << " edep        = " << edep        << endl;
-  cout << " -------------------------- "   << endl;
+  cout << " -------------------------- "       << endl;
+  cout << " primaryID   = " << primaryID       << endl;
+  cout << " sourceID    = " << sourceID        << endl;
+  cout << " runID       = " << runID           << endl;
+  cout << " eventID     = " << eventID         << endl;
+  cout << " entry       = " << entryNum        << endl;
+  cout << " process     = " << processName     << endl;
+  cout << " trackID     = " << trackID         << endl;
+  cout << " moduleID    = " << moduleID        << endl;
+  cout << " photonID    = " << photonID        << endl;
+  cout << " time        = " << time            << endl;
+  cout << " parentID    = " << parentID        << endl;
+  cout << " edep        = " << edep            << endl;
+  cout << " posZ        = " << posZ            << endl;
+  cout << " -------------------------- "       << endl;
 
 }
 
@@ -481,6 +526,12 @@ void Hits::CountProcesses(TString processStr){
     if(verbose > 0)
       cout << " Process = " << processStr << endl; 
   }
+}
+
+void Hits::SetVerbose(Int_t v){
+  
+  verbose = v;
+
 }
 
 #endif // #ifdef Hits_cxx

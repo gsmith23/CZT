@@ -1,115 +1,109 @@
 #define Hits_cxx
-#include "Hits_Single.h"
+#include "Hits.h"
 
 void Hits::Loop(Int_t userVerbose,
 		Long64_t maxEvents)
 {
   if (fChain == 0) return;
   
-  verbose = userVerbose;
+  SetVerbose(userVerbose);
   
   Long64_t nentries = fChain->GetEntriesFast();
   Long64_t nbytes = 0, nb = 0;
   
   maxEntry = nentries;
   
+  InitHistos();
+  
   // jentry is entry in the chain
-   for (Long64_t jentry = 0; jentry < maxEntry ; jentry++) {
-     
-     // ientry is entry in the tree
-     Long64_t ientry = LoadTree(jentry);
-     if (ientry < 0) break;
-     
-      nb = fChain->GetEntry(jentry);   
-      nbytes += nb;
+  for (Long64_t jentry = 0; jentry < maxEntry ; jentry++) {
+    
+    // ientry is entry in the tree
+    Long64_t ientry = LoadTree(jentry);
+    if (ientry < 0) break;
+    
+    nb = fChain->GetEntry(jentry);   
+    nbytes += nb;
+    
+    //----------------
+    // Check if the entry is for new event
+    if(eventID != eventID_prevEntry){
+      EndPreviousEvent();
+      InitNewEvent();
+    }
+    
+    eventEntry++;
+    
+    processStr = processName;
+    
+    // calculate phi
+    // first hit of photon
+    if     (eventEntry == 0 &&
+	    processStr=="compt" ){
       
-      //----------------
-      // New event?
-      if(eventID != eventID_prevEntry){
-	
-	if(eventID != (eventID_prevEntry+1) &&
-	   verbose > 0){
-	  cout << endl;
-	  cout << " eventID           = " 
-	       << eventID << endl;
-	  cout << " eventID_prevEntry = " 
-	       << eventID_prevEntry << endl;
-	}
-
-	EndPreviousEvent();
-	InitNewEvent();
+      p0[moduleID].SetXYZ(sourcePosX,
+			  sourcePosY,
+			  sourcePosZ);
+      
+      p1[moduleID].SetXYZ(posX,posY,posZ);
+      
+      
+      if(verbose > 2){
+	PrintTVector3Elements(" p0 = ",p0[moduleID]);
+	PrintTVector3Elements(" p1 = ",p1[moduleID]);
       }
       
-      // Event Processing
-      eventEntry++;
+      fstHitGood = kTRUE;
+    }
+    // second hit of photon
+    else if(eventEntry == 1      && 
+	    (processStr=="compt" ||
+	     processStr=="phot") &&
+	    fstHitGood ){
       
-      //photonEntry++;
+      p2[moduleID].SetXYZ(posX,posY,posZ);
+	
+      vBeam[moduleID] = p1[moduleID] - p0[moduleID];
+      vScat[moduleID] = p2[moduleID] - p1[moduleID];
       
-      processStr = processName;
+      phi[moduleID] = vScat[moduleID].DeltaPhi(vBeam[moduleID]);
+      phi[moduleID] = RadToDeg()*phi[moduleID];
+      theta[moduleID] = vBeam[moduleID].Angle(vScat[moduleID]);
+      theta[moduleID] = RadToDeg()*theta[moduleID];
       
-      // calculate phi
-      if     (eventEntry == 1 && 
-	      processStr=="compt"){
-	
-	p0_g1.SetXYZ(sourcePosX,
-		  sourcePosY,
-		  sourcePosZ);
-	
-	p1_g1.SetXYZ(posX,posY,posZ);
-	
-	
-	if(verbose > 2){
-	  PrintTVector3Elements("p0_g1",p0_g1);
-	  PrintTVector3Elements("p1_g1",p1_g1);
-	}
-	
-	fstHitGood = kTRUE;
-      }
-      else if(eventEntry == 2      && 
-	      (processStr=="compt" ||
-	       processStr=="phot") &&
-	      fstHitGood){
-	
-	p2_g1.SetXYZ(posX,posY,posZ);
-	
-	vBeam_g1 = p1_g1 - p0_g1;
-	vScat_g1 = p2_g1 - p1_g1;
-	
-	phi = vScat_g1.DeltaPhi(vBeam_g1);
-	phi = RadToDeg()*phi;
-	theta = vBeam_g1.Angle(vScat_g1);
-	theta = RadToDeg()*theta;
-	
-	sndHitGood = kTRUE;
-
-	if(verbose>2){
-	  PrintTVector3Elements("vBeam_g1",vBeam_g1);
-	  PrintTVector3Elements("vScat_g1",vScat_g1);
-	}
-	
-      }
-	
-
-      SumEnergyDep();
+      sndHitGood = kTRUE;
       
-      CountProcesses(processName);
-      
-      if(verbose > 1)
-	PrintEntry(jentry);
-      
-      //------------------
-      // End of Looping
-      
-      // truncate loop
-      if(maxEvents >= 0 &&
-	 nEvents   > maxEvents) {
-	FinalStats();
-	break;
+      if(verbose>2){
+	PrintTVector3Elements(" p2    = ",p2[moduleID]);
+	PrintTVector3Elements(" vBeam = ",vBeam[moduleID]);
+	PrintTVector3Elements(" vScat = ",vScat[moduleID]);
       }
       
-      // last event     
-      if( jentry == (nentries-1))
-	FinalStats();
-      
-   }
+    }
+    
+    SumEnergyDep();
+    
+    CountProcesses(processName);
+    
+    if(verbose > 1)
+      PrintEntry(jentry);
+    
+    if(photonID > 1 && parentID == 0)
+      PrintEntry(jentry);
+    
+    //------------------
+    // End of Looping
+    
+    // truncate loop
+    if(maxEvents >= 0 &&
+       nEvents   > maxEvents) {
+      FinalStats();
+      break;
+    }
+    
+    // last event     
+    if( jentry == (nentries-1))
+      FinalStats();
+    
+  }
 }
