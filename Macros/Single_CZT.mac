@@ -3,13 +3,15 @@
 # 14th Dec. 2016
 #
 # Modified by: G. Smith (gsmith23@ph.ed.ac.uk)
-# 24th May 2017
+# 19th July 2017
 #=====================================================
 
 #=====================================================
 # VISUALISATION
 #=====================================================
 
+# disable vis commands
+# when doing long runs
 /vis/disable
 
 /vis/open	     OGLIQt
@@ -66,8 +68,10 @@
 # PHYSICS
 #=====================================================
 
-/gate/physics/addPhysicsList emstandard_opt3
-#/gate/physics/addPhysicsList emlivermore_polar
+#/gate/physics/addPhysicsList emstandard_opt3
+/gate/physics/addPhysicsList emlivermore_polar
+
+#
 /process/em/fluo true
 /process/em/auger true
 /process/em/deexcitation module true true false
@@ -75,6 +79,7 @@
 /gate/physics/processList Enabled
 /gate/physics/processList Initialized
 
+# Necessary?
 /gate/physics/Gamma/SetCutInRegion module 1 um
 
 #=====================================================
@@ -100,17 +105,17 @@
 # NB polarised scattering only takes effect
 # with emlivermore_polar physics list
 
-/gate/source/addSource gamma1 gps
-/gate/source/gamma1/gps/particle gamma
-/gate/source/gamma1/gps/monoenergy 511 keV 
-/gate/source/gamma1/setActivity  1 becquerel
-/gate/source/gamma1/gps/centre 0.0 0.0 0.0 mm
-/gate/source/gamma1/gps/direction 0 0 1
-/gate/source/gamma1/gps/type Plane
-/gate/source/gamma1/gps/shape Square
-/gate/source/gamma1/gps/halfx 11 mm
-/gate/source/gamma1/gps/halfy 11 mm
-/gate/source/gamma1/gps/polarization 1 0 0
+/gate/source/addSource gamma0 gps
+/gate/source/gamma0/gps/particle gamma
+/gate/source/gamma0/gps/monoenergy 511 keV 
+/gate/source/gamma0/setActivity 0.0000 becquerel
+/gate/source/gamma0/gps/centre 0.0 0.0 0.0 mm
+/gate/source/gamma0/gps/direction 0 0 1
+/gate/source/gamma0/gps/type Plane
+/gate/source/gamma0/gps/shape Square
+/gate/source/gamma0/gps/halfx 11 mm
+/gate/source/gamma0/gps/halfy 11 mm
+/gate/source/gamma0/gps/polarization 1 0 0
 
 /gate/source/list
 
@@ -120,8 +125,8 @@
 
 /gate/output/root/enable
 
-#/gate/output/root/setFileName  CZT_Single_StdOpt3_output
-/gate/output/root/setFileName  CZT_Single_LivePol_output
+/gate/output/root/setFileName            LiverPol
+#/gate/output/root/setFileName             emstd_opt3
 /gate/output/root/setRootHitFlag          1
 /gate/output/root/setRootSinglesFlag      0
 /gate/output/root/setRootOpticalFlag      0
@@ -133,7 +138,7 @@
 /gate/random/setEngineName JamesRandom
 
 #/gate/random/setEngineSeed default
-/gate/random/setEngineSeed auto
+s/gate/random/setEngineSeed auto
 
 /gate/random/verbose 1
 
@@ -141,7 +146,4 @@
 #   M E A S U R E M E N T   S E T T I N G S   
 #=====================================================
 
-/gate/application/setTimeStart	0	s
-/gate/application/setTimeStop	120	s
-
-/gate/application/startDAQ
+/control/execute    Run.mac

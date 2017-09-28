@@ -30,48 +30,90 @@ class Hits {
   Int_t    verbose  = 0;
   
   Long64_t nEvents  = 0;
-  Long64_t maxEntry = 0;
-  
+
+  Int_t    nPrimaries = 0;
+
   Int_t    eventID_prevEntry = -1;
   Int_t    eventEntry   = -1;
-  
+
   Int_t    photon0Entry = 0;
   Int_t    photon1Entry = 0;
 
+  Long64_t nHits = 0;
   Int_t    entriesInEvent;
-  Double_t meanEntriesPerEvent = 0.;
+  Double_t meanHitsPerEvent = 0.;
   
-  Int_t    nPhot = 0;
-  Int_t    nRay  = 0;
+  Int_t    nPhot  = 0;
+  Int_t    nRay   = 0;
   Int_t    nComp  = 0;
+  Int_t    nOther = 0;
   
-  Float_t  fracRayOnly  = 0.;
-  Float_t  fracPhotOnly = 0.;
+  Long64_t nPhotTot  = 0;
+  Long64_t nRayTot   = 0;
+  Long64_t nCompTot  = 0;
+  Long64_t nOtherTot = 0;
+
+  Float_t  fracPhotFirst  = 0.;
+  Float_t  fracRayFirst   = 0.;
+  Float_t  fracCompFirst  = 0.;
+  Float_t  fracOtherFirst = 0.;
+
+  Float_t  fracPhotOnly  = 0.;
+  Float_t  fracRayOnly   = 0.;
+  Float_t  fracCompOnly  = 0.;
   
-  Float_t  fracPhot = 0.;
-  Float_t  fracComp = 0.;
+  Float_t  fracPhot   = 0.;
+  Float_t  fracRay    = 0.;
+  Float_t  fracComp   = 0.;
+  Float_t  fracOther  = 0.;
   
+  Float_t  fracPET = 0.;
+  Float_t  fracQET = 0.;
+  Float_t  fracE_LT_511 = 0.;
+
   TString  processStr;
-  TString  firstProcess;
   
+  Bool_t   edepTot511 = kFALSE;
+  Bool_t   goodPET = kFALSE;
+  Bool_t   goodQET = kFALSE;
+
   Bool_t   fstHitGood = kFALSE;
   Bool_t   sndHitGood = kFALSE;
+  
+  Bool_t   photFirst = kFALSE;
+  Bool_t   compFirst = kFALSE;
   
   Float_t  eTotMod1 = 0.;
   Float_t  eTotMod2 = 0.;
   
-  Float_t  phi[2],theta[2];
+  static const Int_t nModules = 1;
+  
+  Float_t detThick = 100.;
+
+
+  Float_t  phi[nModules],theta[nModules];
+  Float_t  dR[nModules];
+  Float_t  dXY[nModules];
+  Float_t  dZ[nModules];
   
   // vectors for calculating theta, phi
-  TVector3 vBeam[2];
-  TVector3 p0[2];
-  TVector3 p1[2];
-  TVector3 p2[2];
-  TVector3 vScat[2];
+  TVector3 vBeam[nModules];
+  TVector3 p0[nModules];
+  TVector3 p1[nModules];
+  TVector3 p2[nModules];
+  TVector3 vScat[nModules];
 
-  TH1F * hPhi[2];
-  TH1F * hTheta[2];
+  TH1F * hPhi[nModules];
+  TH1F * hTheta[nModules];
+  TH1F * hdR[nModules];
   
+  TH1F * hZ1Phot[nModules];
+  TH1F * hZ1Comp[nModules];
+
+  TH2F * hdZdXY[nModules];
+  TH2F * hThetadXY[nModules];
+  TH2F * hThetadR[nModules];
+
   TString hName;
   TString hTitle;
   
@@ -155,16 +197,16 @@ class Hits {
   TBranch        *b_comptVolName;   //!
   TBranch        *b_RayleighVolName;   //!
   
-  Hits(TTree *tree=0);
+  //Hits(TTree *tree=0);
+  Hits();
   virtual ~Hits();
   virtual Int_t    GetEntry(Long64_t entry);
   virtual Long64_t LoadTree(Long64_t entry);
   virtual void     Init(TTree *tree);
-  virtual void     Loop(Int_t userVerbose = 0,
-			Long64_t maxEvents = -1);
+  virtual void     Loop(Long64_t maxEvents = -1);
   virtual Bool_t   Notify();
   virtual void     Show(Long64_t entry = -1);
-  
+
   void InitHistos();
   void InitNewEvent();
   void EndEvent(Bool_t);
@@ -173,45 +215,32 @@ class Hits {
   void PrintEventStats(Bool_t);
   void PrintTVector3Elements(TString,
 			     TVector3);
+  void SetQETVariables();
+
+  Bool_t HitDet(Int_t);
+
+  TString GetFilePath();
+  void SetFile(TString);
+  void Run(Int_t userVerbose,
+	   Long64_t maxEvents);
   void FinalStats();
   void SumEnergyDep();
   void CountProcesses(TString);
-  
   void SetVerbose(Int_t);
-
+  void PlotHistograms();
+  void EndRun();
+  void ResetRunVariables();
+  
 };
 
 #endif
 
 #ifdef Hits_cxx
-Hits::Hits(TTree *tree) : fChain(0) 
+Hits::Hits() : fChain(0) 
 {
-  // if parameter tree is not specified (or zero), connect the file
-  // used to generate this class and read the Tree.
-  
-  fileName      = "CZT_Single_No_Pol_output.root";
-  fileName      = "CZT_Single_Pol_output.root";
-  
-  fileName      = "CZT_Single_LivePol_output.root";
-  //fileName      = "CZT_Single_StdOpt3_output.root";
-  
-  fileName      = "CZT_Double_LivePol_output.root";
-  
-  //fileName = "test_double.root";
 
-  dataDirectory = "../Data/";
-  
-  filePath = dataDirectory + fileName;
-  
-  if (tree == 0) {
-    TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject(filePath);
-    if (!f || !f->IsOpen()) {
-      f = new TFile(filePath);
-    }
-    f->GetObject("Hits",tree);
+  SetFile("emstd_opt3");
 
-  }
-  Init(tree);
 }
 
 Hits::~Hits()
@@ -220,12 +249,111 @@ Hits::~Hits()
    delete fChain->GetCurrentFile();
 }
 
+
+Bool_t Hits::HitDet(Int_t hit){
+  
+  if     (hit==1)
+    return p1[moduleID].Z() < (detThick + 50.);
+  else if(hit==2)
+    return p2[moduleID].Z() < (detThick + 50.);
+  else 
+    return false;
+}
+
+void Hits::SetQETVariables(){
+
+  
+  p1[moduleID].SetXYZ(posX,posY,posZ);
+
+  // first hit of photon
+  if     (eventEntry == 0 &&
+	  processStr=="compt" ){
+    
+    p0[moduleID].SetXYZ(sourcePosX,
+			sourcePosY,
+			sourcePosZ);
+    
+    
+    
+    
+    if(verbose > 2){
+      PrintTVector3Elements(" p0 ",p0[moduleID]);
+      PrintTVector3Elements(" p1 ",p1[moduleID]);
+    }
+    
+    fstHitGood = kTRUE;
+  }
+  // second hit of photon
+  else if(eventEntry == 1      && 
+	  (processStr=="compt" ||
+	   processStr=="phot") &&
+	  fstHitGood ){
+    
+    p2[moduleID].SetXYZ(posX,posY,posZ);
+    
+    vBeam[moduleID] = p1[moduleID] - p0[moduleID];
+    vScat[moduleID] = p2[moduleID] - p1[moduleID];
+    
+    phi[moduleID] = vScat[moduleID].DeltaPhi(vBeam[moduleID]);
+    phi[moduleID] = RadToDeg()*phi[moduleID];
+    theta[moduleID] = vBeam[moduleID].Angle(vScat[moduleID]);
+    theta[moduleID] = RadToDeg()*theta[moduleID];
+    
+    dR[moduleID] = vScat[moduleID].Mag();
+    dXY[moduleID] = TMath::Sqrt(vScat[moduleID].X()*
+				vScat[moduleID].X()+
+				vScat[moduleID].Y()*
+				vScat[moduleID].Y());
+    dZ[moduleID]  = vScat[moduleID].Z();
+    
+    sndHitGood = kTRUE;
+    
+    if(verbose>2){
+      PrintTVector3Elements(" p2    ",p2[moduleID]);
+      PrintTVector3Elements(" vBeam ",vBeam[moduleID]);
+      PrintTVector3Elements(" vScat ",vScat[moduleID]);
+    }
+    
+  }
+  
+}
+
+void Hits::SetFile(TString userFileName){
+  
+  fileName      = userFileName + ".root"; 
+  
+  dataDirectory = "../Data/";
+  
+  filePath = dataDirectory + fileName;
+  
+  TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject(filePath);
+  if (!f || !f->IsOpen()) {
+    f = new TFile(filePath);
+  }
+  TTree * tree;
+  f->GetObject("Hits",tree);
+  
+  Init(tree);
+  
+}
+
+TString Hits::GetFilePath(){
+
+  cout << endl;
+  cout << " filePath = " << filePath << endl;
+  cout << endl;
+
+  return filePath;
+}
+
+
 Int_t Hits::GetEntry(Long64_t entry)
 {
 // Read contents of entry.
    if (!fChain) return 0;
    return fChain->GetEntry(entry);
 }
+
 Long64_t Hits::LoadTree(Long64_t entry)
 {
 // Set the environment to read one entry
@@ -255,6 +383,7 @@ void Hits::Init(TTree *tree)
    fCurrent = -1;
    fChain->SetMakeClass(1);
 
+   //
    fChain->SetBranchAddress("PDGEncoding", &PDGEncoding, &b_PDGEncoding);
    fChain->SetBranchAddress("trackID", &trackID, &b_trackID);
    fChain->SetBranchAddress("parentID", &parentID, &b_parentID);
@@ -310,20 +439,23 @@ void Hits::PrintEventStats(Bool_t prevEvent){
   Float_t eventID2Print = eventID;
 
   if(prevEvent)
-    eventID2Print = eventID-1;
-      
+    eventID2Print = eventID_prevEntry;
 
-  if(verbose > 0 ){
+  if(verbose > 1 ){
+    cout << endl;
+    cout << " --------------------------------------- " <<  endl;
     cout << " Event " << eventID2Print << " Stats "    << endl;
+    cout << endl;
     cout << " eTotMod1        = " << eTotMod1        << endl;
     cout << " n event entries = " << entriesInEvent  << endl;
     
     if(sndHitGood){
-      cout << " phi[moduleID]           = " << phi[moduleID]         << endl;
-      cout << " theta[moduleID]         = " << theta[moduleID]       << endl;
+      cout << " phi["<<   moduleID << "]          = " << phi[moduleID]   << endl;
+      cout << " theta["<< moduleID << "]        = " << theta[moduleID] << endl;
     }
     
     cout << " --------------------------------------- " <<  endl;
+    cout << endl;
   }
   
 }
@@ -345,41 +477,111 @@ void Hits::EndPreviousEvent(){
 }
 
 void Hits::EndEvent(Bool_t prevEvnt = kFALSE){
-
-  // print event statistics 
-  if(eventID_prevEntry == -1)
+  
+  if(verbose > 3){
+    cout << endl; 
+    cout << " Start of EndEvent " << endl;
+    cout << " prevEvnt = " << prevEvnt << endl;
+    cout << endl; 
+  }
+  
+  // skip if first event
+  if(eventID_prevEntry == -1){
+    if(verbose > 3){
+      cout << endl; 
+      cout << " First Entry, returning " << endl;
+      cout << endl; 
+    }
     return;
+  }
+  
+  entriesInEvent = eventEntry+1;
   
   PrintEventStats(prevEvnt);
-
-  entriesInEvent = eventEntry+1;
   
   eventEntry = -1;
   
+  //----------------
   // iterate / accumulate event variables
-  meanEntriesPerEvent += entriesInEvent;
   
+  meanHitsPerEvent += entriesInEvent;
+  
+  // single process events
   if(entriesInEvent == nPhot)
     fracPhotOnly = fracPhotOnly + 1.;
   else if(entriesInEvent == nRay)
-    fracRayOnly += (Float_t) nRay;
+    fracRayOnly  = fracRayOnly + 1;
+  else if(entriesInEvent == nComp)
+    fracCompOnly = fracCompOnly + 1;
   
-  if(nPhot>0 && nComp == 0)
+  // process frequency per event
+  //  (once or more per event)
+  if(nPhot > 0)
     fracPhot = fracPhot + 1.0;
   
   if(nComp > 0)
     fracComp = fracComp + 1.0;
+
+  if(nRay > 0)
+    fracRay  = fracRay + 1.0;
   
+  if(nOther > 0)
+    fracOther = fracOther + 1.0;
+    
+  if(eTotMod1 < 0.51)
+    fracE_LT_511 = fracE_LT_511 + 1.0;
+
+  if(goodQET)
+    fracQET = fracQET + 1.0;
+  
+  if(goodPET)
+    fracPET = fracPET + 1.0;
+
+  Float_t z1 = p1[moduleID].Z()-50.;
+  
+  if(HitDet(1)){
+  
+    if     (photFirst)
+      hZ1Phot[moduleID]->Fill(z1);
+    else if(compFirst)
+      hZ1Comp[moduleID]->Fill(z1);
+    
+  }
+    
   if(sndHitGood){
+    
+
     hPhi[moduleID]->Fill(phi[moduleID]);
     hTheta[moduleID]->Fill(theta[moduleID]);
+    hdR[moduleID]->Fill(dR[moduleID]);
+    
+    hdZdXY[moduleID]->Fill(z1,
+			   dXY[moduleID]);
+    
+    //if(p1[moduleID].Z() < 60.)
+    hThetadXY[moduleID]->Fill(theta[moduleID],dXY[moduleID]);
+    hThetadR[moduleID]->Fill(theta[moduleID],dR[moduleID]);
+    
   }
-
+  
+  if(verbose > 3){
+    cout << endl; 
+    cout << " End of EndEvent " << endl;
+    cout << endl; 
+  }
 }
 
 void Hits::InitHistos(){
   
-  for( Int_t i = 0 ; i < 2 ; i++){
+  if( verbose > 2 ){
+    cout << endl;
+    cout << " --------------------------------------- " <<  endl;
+    cout << "  InitHistos() " << endl;
+    cout << " --------------------------------------- " <<  endl;
+    cout << endl;
+  }
+  
+  for( Int_t i = 0 ; i < nModules ; i++){
     
     hName.Form("hPhi_%d",i);
     hTitle.Form("hPhi_%d;#phi (deg);Events",i);
@@ -390,6 +592,41 @@ void Hits::InitHistos(){
     hTitle.Form("hTheta_%d;#theta (deg);Events",i);
     hTheta[i] = new TH1F(hName,hTitle,
 			 nBins,0,180);
+    
+    hName.Form("hdR_%d",i);
+    hTitle.Form("hdR_%d; dR (mm) ;Events",i);
+    hdR[i] = new TH1F(hName,hTitle,
+		      nBins,0,20);
+  
+    hName.Form("hZ1Phot_%d",i);
+    hTitle.Form("hZ1Phot_%d; Z1 (mm) ;Events",i);
+    hZ1Phot[i] = new TH1F(hName,hTitle,
+			  nBins,0,20);
+    
+    hName.Form("hZ1Comp_%d",i);
+    hTitle.Form("hZ1Comp_%d; Z1 (mm) ;Events",i);
+    hZ1Comp[i]= new TH1F(hName,hTitle,
+			 nBins,0,20);
+    
+    hName.Form("hdZdXY_%d",i);
+    hTitle.Form("hdZdXY_%d; Z_{1} (mm); dXY (mm)",i);
+    hdZdXY[i] = new TH2F(hName,hTitle,
+			 nBins,0,40,
+			 nBins,0,20);
+    
+    hName.Form("hThetadXY_%d",i);
+    hTitle.Form("hThetadXY_%d;#theta (deg); dXY (mm)",i);
+    hThetadXY[i] = new TH2F(hName,hTitle,
+			    nBins,0,130,
+			    nBins,0,10);
+  
+    hName.Form("hThetadR_%d",i);
+    hTitle.Form("hRTheta_%d; #theta (deg) ; dR (mm)",i);
+    hThetadR[i] = new TH2F(hName,hTitle,
+			   nBins,0,130,
+			   nBins,0,10);
+  
+    
   }
 }
 
@@ -405,74 +642,183 @@ void Hits::InitNewEvent(){
   eTotMod1 = 0.0;
   eTotMod2 = 0.0;
   
-  nRay  = 0;
-  nPhot = 0;
-  nComp = 0;
-
+  nRay   = 0;
+  nPhot  = 0;
+  nComp  = 0;
+  nOther = 0;
+  
+  photFirst = kFALSE;
+  compFirst = kFALSE;
+  
   fstHitGood  = kFALSE;
   sndHitGood = kFALSE;
+  
+  goodPET = kFALSE;
+  goodQET = kFALSE;
+  
+  edepTot511 = kFALSE;
 
-  if( verbose > 0 ) {
+  p0[moduleID].SetXYZ(-999.9,-999.9,-999.9);
+  p1[moduleID].SetXYZ(0,0,0);
+  p2[moduleID].SetXYZ(0,0,0);
+
+  if( verbose > 1 ) {
     cout << " --------------------------------------- " <<  endl;
+    cout << endl;
     cout << " Processing event " << eventID <<  endl;
   }
   
+}
+
+void Hits::EndRun(){
+  
+  FinalStats();
+  
+  PlotHistograms();  
+  
+  ResetRunVariables();
+  
+}
+
+void Hits::ResetRunVariables(){ 
+
+  nHits = 0.;
+  
+  meanHitsPerEvent  = 0.;
+  eventID_prevEntry = -1;
+  
+  fracPhotOnly = 0;
+  fracRayOnly  = 0;
+  fracPhot     = 0;
+  fracComp     = 0;
+  
+  nEvents      = 0;
 }
 
 void Hits::FinalStats(){
 
   // Last iteration of loop
   EndEvent();
-  
-  // Calculate final variables
-  meanEntriesPerEvent = (Double_t)meanEntriesPerEvent/nEvents;
-  
-  fracPhotOnly = fracPhotOnly/(Float_t)nEvents;
-  fracRayOnly  = fracRayOnly/(Float_t)nEvents;
-  fracPhot     = fracPhot/(Float_t)nEvents;
-  fracComp     = fracComp/(Float_t)nEvents;
-               
+
   // print full data set details
   cout <<  endl;
-  cout << " --------------------------------------- " <<  endl;
-  cout << " --------------------------------------- " <<  endl;
-  cout << " ------------- Final Stats  ------------ " <<  endl;
-  cout << "    "        << fileName                   <<  endl;  
-  cout << " --------------------------------------- " <<  endl;
-  cout << " nEvents        = " << nEvents             <<  endl;
-  cout << " nentries       = " << maxEntry            <<  endl;
-  cout << " hits per event = " << meanEntriesPerEvent <<  endl;
-  cout << " fracPhot       = " << fracPhot            <<  endl; 
-  cout << " fracComp       = " << fracComp            <<  endl; 
-  cout << " fracPhotOnly   = " << fracPhotOnly        <<  endl; 
-  cout << " fracRayOnly    = " << fracRayOnly         <<  endl; 
-  cout << " --------------------------------------- " <<  endl;
-  cout << " --------------------------------------- " <<  endl;
-
-  meanEntriesPerEvent = 0.;
-  eventID_prevEntry = -1;
-    
-  fracPhotOnly = 0;
-  fracRayOnly  = 0;
-  fracPhot     = 0;
-  fracComp     = 0;
-  nEvents      = 0;
+  cout << " --------------------------------------- "   <<  endl;
+  cout << " --------------------------------------- "   <<  endl;
+  cout << " ------------- Final Stats  ------------ "   <<  endl;
+  cout <<  endl;
+  cout << "    File: "        << fileName               <<  endl;  
+  cout <<  endl;
+  cout << " --------------------------------------- "   <<  endl;
   
+  // hits
+  nPrimaries = eventID + 1;
+  meanHitsPerEvent = (Double_t)meanHitsPerEvent/nEvents;
+  
+  cout << " --   Hits  "  <<  endl;
+  cout <<  endl;
+  cout << " Primaries        = " << nPrimaries          <<  endl;
+  cout << " Events with hits = " << nEvents             <<  endl;
+  cout << " Hits             = " << nHits               <<  endl;
+  cout << " Mean hits/event  = " << meanHitsPerEvent    <<  endl;
+  cout <<  endl;
+
+  // processes
+
+  fracPhotOnly  = fracPhotOnly/(Float_t)nPrimaries;
+  fracRayOnly   = fracRayOnly/(Float_t)nPrimaries;
+  fracCompOnly  = fracCompOnly/(Float_t)nPrimaries;
+  
+  fracPhot     = fracPhot/(Float_t)nPrimaries;
+  fracRay      = fracRay/(Float_t)nPrimaries;
+  fracComp     = fracComp/(Float_t)nPrimaries;
+  fracOther    = fracOther/(Float_t)nPrimaries;
+
+  fracPhotFirst  = fracPhotFirst/(Float_t)nPrimaries;
+  fracRayFirst   = fracRayFirst/(Float_t)nPrimaries;
+  fracCompFirst  = fracCompFirst/(Float_t)nPrimaries;
+  fracOtherFirst = fracOtherFirst/(Float_t)nPrimaries;
+  
+  fracPET      = fracPET/(Float_t)nPrimaries;
+  fracQET      = fracQET/(Float_t)nPrimaries;
+  fracE_LT_511 = fracE_LT_511/(Float_t)nPrimaries;
+  
+  Float_t meanPhotPerPrimary = nPhotTot/nPrimaries;
+  Float_t meanCompPerPrimary = nCompTot/nPrimaries;
+  Float_t meanRayPerPrimary  = nRayTot/nPrimaries;
+  
+  cout << " ---------------------------------------- "   <<  endl;
+  cout << " ----- Processes [ / primaries ] ------- "   <<  endl;
+  cout <<  endl;
+  cout << "  Photoelec only      = " << fracPhotOnly  <<  endl; 
+  cout << "  Compton   only      = " << fracCompOnly  <<  endl; 
+  cout << "  Rayleigh  only      = " << fracRayOnly   <<  endl; 
+  cout <<  endl;
+  cout << "  Photoelectric       = " << fracPhot      <<  endl; 
+  cout << "  Compton             = " << fracComp      <<  endl; 
+  cout << "  Rayleigh            = " << fracRay       <<  endl; 
+  cout << "  Other               = " << fracOther     <<  endl; 
+  cout <<  endl;
+  cout << "  Photoelec first     = " << fracPhotFirst  <<  endl; 
+  cout << "  Compton   first     = " << fracCompFirst  <<  endl; 
+  cout << "  Rayleigh  first     = " << fracRayFirst   <<  endl; 
+  cout << "  Other     first     = " << fracOtherFirst <<  endl; 
+  cout <<  endl;
+  cout << "  Good PET   = " << fracPET      <<  endl; 
+  cout << "  Good QET   = " << fracQET      <<  endl; 
+  cout << "  edep < 511 = " << fracE_LT_511 <<  endl; 
+  cout <<  endl;
+  cout << " --------------------------------------- "   <<  endl;
+  cout << " --------------------------------------- "   <<  endl;
+}
+
+void Hits::PlotHistograms(){
+  
+  if(verbose >= 1){
+    cout << endl;
+    cout << " Plotting Histograms " << endl;
+  }
+ 
   for (Int_t i = 0 ; i < 2 ; i++)
     hPhi[i]->SetMinimum(0);
   
-  TCanvas * canvas =  new TCanvas("canvas","canvas",800,800);
+  Int_t width  = 800;
+  Int_t height = 800;
+  
+  if(nModules==2)
+    height = 800;
+
+  TCanvas * canvas =  new TCanvas("canvas","canvas",width,height);
+  
+  //canvas->Divide(2,nModules);
   canvas->Divide(2,2);
-
   canvas->cd(1);
-  hPhi[0]->Draw();
+  hZ1Phot[0]->Draw();
   canvas->cd(2);
-  hTheta[0]->Draw();
-  canvas->cd(3);
-  hPhi[1]->Draw();
-  canvas->cd(4);
-  hTheta[1]->Draw();
+  hZ1Comp[0]->Draw();
 
+  /* canvas->cd(1); */
+/*   hdR[0]->Draw(); */
+/*   canvas->cd(2); */
+/*   hdZdXY[0]->Draw("colz"); */
+/*   canvas->cd(3); */
+/*   hThetadXY[0]->Draw("colz"); */
+/*   canvas->cd(4); */
+/*   hThetadR[0]->Draw("colz"); */
+  
+  for (Int_t i = 0 ; i < nModules ; i++){
+    //canvas->cd(1+2*i); */
+/*     hPhi[i]->Draw(); */
+/*     canvas->cd(2+2*i); */
+    //hTheta[i]->Draw();
+    //hdR[i]->Draw();
+    //hdZdXY[i]->Draw("colz");
+    //hThetadXY[i]->Draw("colz");
+  }
+  
+/*   Char_t cont = 'n'; */
+/*   cout << " continue ? " << endl; */
+/*   cin >> cont; */
+  
 }
 
 void Hits::PrintEntry(Long64_t entryNum){
@@ -505,6 +851,11 @@ void Hits::Show(Long64_t entry)
 
 void Hits::SumEnergyDep(){
   
+  if( verbose > 1 ){
+    cout << endl;
+    cout << " SumEnergyDep " << endl;
+  }
+  
   if     (moduleID==0){
     eTotMod1 += edep;
   }
@@ -515,15 +866,79 @@ void Hits::SumEnergyDep(){
 
 void Hits::CountProcesses(TString processStr){
   
+  if( verbose > 1 ){
+    cout << endl;
+    cout << " Count Processes " << endl;
+  }
   
-  if     (processStr=="Rayl")
+  if( eTotMod1 >= 0.510 ){
+
+    edepTot511 = kTRUE;
+    
+    if(verbose > 2 )
+      cout << " edepTot511 = " << edepTot511 << endl;
+    
+  }
+  
+  if     (processStr=="Rayl"){
     nRay++;
-  else if(processStr=="phot")
+    nRayTot++;
+    
+    if(eventEntry==0)
+      fracRayFirst = fracRayFirst + 1.0;
+  }
+  else if(processStr=="phot"){
     nPhot++;
-  else if(processStr=="compt")
+    nPhotTot++;
+    
+    if(verbose > 0 ){
+      cout << " eventEntry " << eventEntry << endl;
+      cout << " phot " << endl;
+      cout << " edep = " << edep << endl;
+      cout << " edepTot511 = " << edepTot511 << endl;
+    }
+    
+    if     (eventEntry==0){
+      fracPhotFirst = fracPhotFirst + 1.0;
+      
+      if(verbose > 0 )
+	cout << " photFirst " << endl;
+      
+      photFirst = kTRUE;
+      
+      if(edepTot511){
+	
+	if(verbose > 0 )
+	  cout << " goodPET " << endl;
+	
+	goodPET = kTRUE;
+	
+      }
+    }
+    else if (edepTot511){
+      
+      if(nRay == 0 && nOther==0)
+	goodQET = kTRUE;
+      
+    } 
+  }
+  else if(processStr=="compt"){
     nComp++;
+    nCompTot++;
+    
+    if(eventEntry==0){
+      fracCompFirst = fracCompFirst + 1.0;
+      compFirst = kTRUE;
+    }
+  }
   else {
-    if(verbose > 0)
+    nOther++;
+    nOtherTot++;
+
+    if(eventEntry==1)
+      fracOtherFirst = fracOtherFirst + 1.0;
+    
+    if(verbose > 2)
       cout << " Process = " << processStr << endl; 
   }
 }
