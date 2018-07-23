@@ -2,7 +2,8 @@
 Geant4 Application for Emission Tomography (GATE) MC simulation analysis code 
 for a CZT detector geometry 
 
-Written in C++ 
+Written in C++ in the ROOT framework
+Author gary.smith@ed.ac.uk 2017
 
 [Note .C files should be renamed to .cpp]
 
