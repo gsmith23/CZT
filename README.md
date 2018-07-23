@@ -3,7 +3,8 @@ Geant4 Application for Emission Tomography (GATE) MC simulation analysis code
 for a CZT detector geometry 
 
 Written in C++ 
-Note .C files should be renamed to .cpp
+
+[Note .C files should be renamed to .cpp]
 
 CZT is a candidate detector medium for Quantum Enganglement Tomography
 
