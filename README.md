@@ -1,6 +1,8 @@
 # CZT
 Geant4 Application for Emission Tomography (GATE) MC simulation analysis code 
-for a CZT detector geometry as a candidate for Quantum Enganglement Tomography
+for a CZT detector geometry 
+
+CZT is a candidate detector medium for Quantum Enganglement Tomography
 
 GATE (http://www.opengatecollaboration.org) 
 
